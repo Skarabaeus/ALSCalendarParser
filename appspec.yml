@@ -3,4 +3,7 @@ Resources:
   - myLambdaFunction:
       Type: AWS::Lambda::Function
       Properties:
-        Name: "ALSCalendarParser" 
+        Name: ALSCalendarParser
+        Alias: LIVE
+        CurrentVersion: "$CURRENT_VERSION"
+        TargetVersion: "$LATEST" 
