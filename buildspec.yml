@@ -27,32 +27,26 @@ phases:
           CURRENT_VERSION=$(aws lambda get-alias --function-name ALSCalendarParser --name LIVE --query 'FunctionVersion' --output text)
         else
           CURRENT_VERSION=1
+          # Create initial LIVE alias if it doesn't exist
+          aws lambda create-alias --function-name ALSCalendarParser --name LIVE --function-version $CURRENT_VERSION
         fi
         
-        echo "Current version: $CURRENT_VERSION"
-        echo "New version: $NEW_VERSION"
+        echo "Current version: ${CURRENT_VERSION}"
+        echo "New version: ${NEW_VERSION}"
         
-        # Update the LIVE alias to point to the new version
-        if ! aws lambda get-alias --function-name ALSCalendarParser --name LIVE &> /dev/null; then
-          aws lambda create-alias --function-name ALSCalendarParser --name LIVE --function-version $NEW_VERSION
-        else
-          aws lambda update-alias --function-name ALSCalendarParser --name LIVE --function-version $NEW_VERSION
-        fi
-        
-        # Create appspec.yml after alias is updated
+        # Create appspec.yml for CodeDeploy
         cat > appspec.yml << EOF
-        version: 0.0
-        Resources:
-          - myLambdaFunction:
-              Type: AWS::Lambda::Function
-              Properties:
-                Name: ALSCalendarParser
-                Alias: LIVE
-                CurrentVersion: $CURRENT_VERSION
-                TargetVersion: $NEW_VERSION
-        EOF
+version: 0.0
+Resources:
+  - myLambdaFunction:
+      Type: AWS::Lambda::Function
+      Properties:
+        Name: ALSCalendarParser
+        Alias: LIVE
+        CurrentVersion: ${CURRENT_VERSION}
+        TargetVersion: ${NEW_VERSION}
+EOF
         
-        # Print the generated appspec.yml for debugging
         echo "Generated appspec.yml:"
         cat appspec.yml
 
