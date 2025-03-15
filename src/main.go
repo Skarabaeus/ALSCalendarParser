@@ -2,14 +2,16 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/aws/aws-lambda-go/lambda"
 	"golang.org/x/net/html"
 )
 
@@ -21,9 +23,78 @@ const (
 // Event represents a calendar event with a date and description
 type Event struct {
 	// EventDate stores the date of the event
-	EventDate time.Time
+	EventDate time.Time `json:"date"`
 	// EventDescription stores the full description of the event, including time and details
-	EventDescription string
+	EventDescription string `json:"description"`
+}
+
+// Response represents the Lambda function response
+type Response struct {
+	StatusCode int               `json:"statusCode"`
+	Body       string            `json:"body"`
+	Headers    map[string]string `json:"headers"`
+}
+
+// HandleRequest is the Lambda handler function
+func HandleRequest(ctx context.Context) (Response, error) {
+	// Create a new HTTP client
+	client := &http.Client{}
+
+	// Create a new request
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return createErrorResponse(fmt.Errorf("error creating request: %v", err))
+	}
+
+	// Set User-Agent header
+	req.Header.Set("User-Agent", userAgent)
+
+	// Make the request
+	resp, err := client.Do(req)
+	if err != nil {
+		return createErrorResponse(fmt.Errorf("error making request: %v", err))
+	}
+	defer resp.Body.Close()
+
+	// Read the response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return createErrorResponse(fmt.Errorf("error reading response body: %v", err))
+	}
+
+	// Extract events
+	events, err := extractEvents(body)
+	if err != nil {
+		return createErrorResponse(fmt.Errorf("error extracting events: %v", err))
+	}
+
+	// Convert events to JSON
+	jsonData, err := json.Marshal(events)
+	if err != nil {
+		return createErrorResponse(fmt.Errorf("error marshaling events to JSON: %v", err))
+	}
+
+	// Return successful response
+	return Response{
+		StatusCode: 200,
+		Body:       string(jsonData),
+		Headers: map[string]string{
+			"Content-Type":                "application/json",
+			"Access-Control-Allow-Origin": "*",
+		},
+	}, nil
+}
+
+// createErrorResponse creates an error response
+func createErrorResponse(err error) (Response, error) {
+	return Response{
+		StatusCode: 500,
+		Body:       fmt.Sprintf(`{"error":"%s"}`, err.Error()),
+		Headers: map[string]string{
+			"Content-Type":                "application/json",
+			"Access-Control-Allow-Origin": "*",
+		},
+	}, nil
 }
 
 // extractEvents finds all tags with class="events" and extracts their dates and descriptions.
@@ -112,43 +183,5 @@ func cleanText(s string) string {
 }
 
 func main() {
-	// Create a new HTTP client
-	client := &http.Client{}
-
-	// Create a new request
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		log.Fatalf("Error creating request: %v", err)
-	}
-
-	// Set User-Agent header
-	req.Header.Set("User-Agent", userAgent)
-
-	// Make the request
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatalf("Error making request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Read the response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("Error reading response body: %v", err)
-	}
-
-	// Extract events
-	events, err := extractEvents(body)
-	if err != nil {
-		log.Fatalf("Error extracting events: %v", err)
-	}
-
-	// Print the results
-	fmt.Printf("Found %d events:\n", len(events))
-	for i, event := range events {
-		fmt.Printf("%d. Date: %s\n   Description: %s\n\n",
-			i+1,
-			event.EventDate.Format("Monday, January 2, 2006"),
-			event.EventDescription)
-	}
+	lambda.Start(HandleRequest)
 }
