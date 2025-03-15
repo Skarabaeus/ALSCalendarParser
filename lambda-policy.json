@@ -1,0 +1,12 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "lambda:UpdateFunctionCode"
+            ],
+            "Resource": "arn:aws:lambda:eu-central-1:886436964684:function:ALSCalendarParser"
+        }
+    ]
+} 
