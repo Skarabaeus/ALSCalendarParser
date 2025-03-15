@@ -13,12 +13,12 @@ phases:
   build:
     commands:
       - echo "Building Lambda function..."
-      - GOOS=linux GOARCH=amd64 go build -o main
+      - GOOS=linux GOARCH=amd64 go build -o bootstrap
       
   post_build:
     commands:
       - echo "Creating deployment package..."
-      - zip function.zip main
+      - zip function.zip bootstrap
       - NEW_VERSION=$(aws lambda update-function-code --function-name ALSCalendarParser --zip-file fileb://function.zip --publish --query 'Version' --output text)
       - |
         if aws lambda get-alias --function-name ALSCalendarParser --name LIVE &> /dev/null; then
