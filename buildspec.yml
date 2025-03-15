@@ -19,34 +19,18 @@ phases:
     commands:
       - echo "Creating deployment package..."
       - zip function.zip main
-      # First update and publish the new version
       - NEW_VERSION=$(aws lambda update-function-code --function-name ALSCalendarParser --zip-file fileb://function.zip --publish --query 'Version' --output text)
       - |
-        # Get the current version from LIVE alias or use 1 if it doesn't exist
         if aws lambda get-alias --function-name ALSCalendarParser --name LIVE &> /dev/null; then
           CURRENT_VERSION=$(aws lambda get-alias --function-name ALSCalendarParser --name LIVE --query 'FunctionVersion' --output text)
         else
           CURRENT_VERSION=1
-          # Create initial LIVE alias if it doesn't exist
           aws lambda create-alias --function-name ALSCalendarParser --name LIVE --function-version $CURRENT_VERSION
         fi
-        
         echo "Current version: ${CURRENT_VERSION}"
         echo "New version: ${NEW_VERSION}"
-        
-        # Create appspec.yml for CodeDeploy
-        cat << EOF > appspec.yml
-version: 0.0
-Resources:
-  - myLambdaFunction:
-      Type: AWS::Lambda::Function
-      Properties:
-        Name: ALSCalendarParser
-        Alias: LIVE
-        CurrentVersion: ${CURRENT_VERSION}
-        TargetVersion: ${NEW_VERSION}
-EOF
-        
+        sed -i "s/CURRENT_VERSION_PLACEHOLDER/${CURRENT_VERSION}/g" appspec.yml
+        sed -i "s/TARGET_VERSION_PLACEHOLDER/${NEW_VERSION}/g" appspec.yml
         echo "Generated appspec.yml:"
         cat appspec.yml
 
