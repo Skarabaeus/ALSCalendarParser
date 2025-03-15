@@ -1,0 +1,32 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      golang: 1.x
+  
+  pre_build:
+    commands:
+      - echo "Installing dependencies..."
+      - go mod download
+      
+  build:
+    commands:
+      - echo "Building Lambda function..."
+      - GOOS=linux GOARCH=amd64 go build -o main
+      
+  post_build:
+    commands:
+      - echo "Creating deployment package..."
+      - zip function.zip main
+      - aws lambda update-function-code --function-name ALSCalendarParser --zip-file fileb://function.zip
+
+artifacts:
+  files:
+    - function.zip
+    - appspec.yml
+  discard-paths: yes
+
+cache:
+  paths:
+    - /go/pkg/mod/**/* 
