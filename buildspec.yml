@@ -35,7 +35,7 @@ phases:
         echo "New version: ${NEW_VERSION}"
         
         # Create appspec.yml for CodeDeploy
-        cat > appspec.yml << EOF
+        cat << EOF > appspec.yml
 version: 0.0
 Resources:
   - myLambdaFunction:
