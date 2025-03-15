@@ -4,7 +4,12 @@
         {
             "Effect": "Allow",
             "Action": [
-                "lambda:UpdateFunctionCode"
+                "lambda:UpdateFunctionCode",
+                "lambda:PublishVersion",
+                "lambda:ListVersionsByFunction",
+                "lambda:GetAlias",
+                "lambda:CreateAlias",
+                "lambda:UpdateAlias"
             ],
             "Resource": "arn:aws:lambda:eu-central-1:886436964684:function:ALSCalendarParser"
         }

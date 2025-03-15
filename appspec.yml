@@ -1,9 +1,6 @@
 version: 0.0
 Resources:
-  - ALSCalendarParser:
+  - myLambdaFunction:
       Type: AWS::Lambda::Function
       Properties:
-        Name: "ALSCalendarParser"
-        Alias: "LIVE"
-        CurrentVersion: "1"
-        TargetVersion: "2" 
+        Name: "ALSCalendarParser" 
