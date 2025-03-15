@@ -23,8 +23,8 @@ phases:
 
 artifacts:
   files:
-    - function.zip
     - appspec.yml
+    - function.zip
   discard-paths: yes
 
 cache:
