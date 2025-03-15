@@ -40,17 +40,17 @@ phases:
         fi
         
         # Create appspec.yml after alias is updated
-        cat > appspec.yml << EOF
-version: 0.0
-Resources:
-  - myLambdaFunction:
-      Type: AWS::Lambda::Function
-      Properties:
-        Name: ALSCalendarParser
-        Alias: LIVE
-        CurrentVersion: $CURRENT_VERSION
-        TargetVersion: $NEW_VERSION
-EOF
+        cat > appspec.yml << 'EOF'
+        version: 0.0
+        Resources:
+          - myLambdaFunction:
+              Type: AWS::Lambda::Function
+              Properties:
+                Name: ALSCalendarParser
+                Alias: LIVE
+                CurrentVersion: '$CURRENT_VERSION'
+                TargetVersion: '$NEW_VERSION'
+        EOF
 
 artifacts:
   files:
