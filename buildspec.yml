@@ -26,7 +26,7 @@ phases:
         if aws lambda get-alias --function-name ALSCalendarParser --name LIVE &> /dev/null; then
           CURRENT_VERSION=$(aws lambda get-alias --function-name ALSCalendarParser --name LIVE --query 'FunctionVersion' --output text)
         else
-          CURRENT_VERSION="1"
+          CURRENT_VERSION=1
         fi
         
         echo "Current version: $CURRENT_VERSION"
@@ -40,7 +40,7 @@ phases:
         fi
         
         # Create appspec.yml after alias is updated
-        cat > appspec.yml << 'EOF'
+        cat > appspec.yml << EOF
         version: 0.0
         Resources:
           - myLambdaFunction:
@@ -48,9 +48,13 @@ phases:
               Properties:
                 Name: ALSCalendarParser
                 Alias: LIVE
-                CurrentVersion: '$CURRENT_VERSION'
-                TargetVersion: '$NEW_VERSION'
+                CurrentVersion: $CURRENT_VERSION
+                TargetVersion: $NEW_VERSION
         EOF
+        
+        # Print the generated appspec.yml for debugging
+        echo "Generated appspec.yml:"
+        cat appspec.yml
 
 artifacts:
   files:
