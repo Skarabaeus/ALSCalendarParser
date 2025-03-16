@@ -18,7 +18,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"golang.org/x/net/html"
 )
 
@@ -225,129 +224,10 @@ func HandleRequest(ctx context.Context) (Response, error) {
 		return createErrorResponse(fmt.Errorf("error processing events: %v", err))
 	}
 
-	// Before creating the MailerSend request, fetch the API token
-	cfg, err = config.LoadDefaultConfig(ctx,
-		config.WithRegion("eu-central-1"), // Explicitly set the region
-	)
-	if err != nil {
-		return createErrorResponse(fmt.Errorf("error loading AWS config: %v", err))
-	}
-	secretsClient := secretsmanager.NewFromConfig(cfg)
-
-	// Get the API token from AWS Secrets Manager
-	secretResult, err := secretsClient.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-		SecretId: aws.String("prod/mailersend/apitoken"),
-	})
-	if err != nil {
-		return createErrorResponse(fmt.Errorf("error getting secret: %v", err))
-	}
-
-	// Parse the secret JSON to extract the token
-	rawSecret := *secretResult.SecretString
-	var token string
-
-	// Try parsing outer JSON first
-	var secretData map[string]string
-	if err := json.Unmarshal([]byte(rawSecret), &secretData); err != nil {
-		// If JSON parsing fails, use the raw string as the token
-		token = rawSecret
-	} else {
-		// Try all possible key formats (including the typo'd version)
-		innerJSON := secretData["prod/mailersend/apitoken"]
-		if innerJSON == "" {
-			innerJSON = secretData["prod/mailerend/apitoken"] // Try the typo'd version
-		}
-		if innerJSON == "" {
-			innerJSON = secretData["apitoken"]
-		}
-
-		if innerJSON != "" {
-			// Try parsing the inner JSON value
-			var innerData map[string]string
-			if err := json.Unmarshal([]byte(innerJSON), &innerData); err == nil {
-				// Try to get the token from the inner JSON
-				token = innerData["prod/mailersend/apitoken"]
-				if token == "" {
-					token = innerData["prod/mailerend/apitoken"]
-				}
-				if token == "" {
-					token = innerData["apitoken"]
-				}
-			}
-
-			// If we couldn't parse the inner JSON or find a token, use the inner JSON as the token
-			if token == "" {
-				token = innerJSON
-			}
-		} else {
-			// If we couldn't find any known keys, use the raw secret
-			token = rawSecret
-		}
-	}
-
-	if token == "" {
-		return createErrorResponse(fmt.Errorf("token not found in secret"))
-	}
-
-	// Send email via MailerSend API
-	type MailerSendRecipient struct {
-		Email string `json:"email"`
-	}
-
-	type MailerSendFrom struct {
-		Email string `json:"email"`
-	}
-
-	type MailerSendPayload struct {
-		From    MailerSendFrom        `json:"from"`
-		To      []MailerSendRecipient `json:"to"`
-		Subject string                `json:"subject"`
-		Text    string                `json:"text"`
-		HTML    string                `json:"html"`
-	}
-
+	// Marshal the report to JSON
 	reportJSON, err := json.Marshal(report)
 	if err != nil {
 		return createErrorResponse(fmt.Errorf("error marshaling report: %v", err))
-	}
-
-	payload := MailerSendPayload{
-		From: MailerSendFrom{
-			Email: "stefan.siebel@trial-3yxj6ljk8n5gdo2r.mlsender.net",
-		},
-		To: []MailerSendRecipient{
-			{
-				Email: "siebel.stefan@gmail.com",
-			},
-		},
-		Subject: "ALS Calendar Update",
-		Text:    string(reportJSON),
-		HTML:    string(reportJSON),
-	}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return createErrorResponse(fmt.Errorf("error marshaling email payload: %v", err))
-	}
-
-	mailerReq, err := http.NewRequest("POST", "https://api.mailersend.com/v1/email", bytes.NewBuffer(payloadBytes))
-	if err != nil {
-		return createErrorResponse(fmt.Errorf("error creating email request: %v", err))
-	}
-
-	mailerReq.Header.Set("Content-Type", "application/json")
-	mailerReq.Header.Set("X-Requested-With", "XMLHttpRequest")
-	mailerReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-
-	mailerResp, err := httpClient.Do(mailerReq)
-	if err != nil {
-		return createErrorResponse(fmt.Errorf("error sending email: %v", err))
-	}
-	defer mailerResp.Body.Close()
-
-	if mailerResp.StatusCode != http.StatusAccepted && mailerResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(mailerResp.Body)
-		return createErrorResponse(fmt.Errorf("email API error: status %d, response: %s", mailerResp.StatusCode, string(body)))
 	}
 
 	// Return successful response with calendar data
