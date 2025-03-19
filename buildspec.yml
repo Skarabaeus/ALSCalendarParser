@@ -17,6 +17,8 @@ phases:
       
   post_build:
     commands:
+      - echo "Uploading email template to S3..."
+      - aws s3 cp email-template.html s3://${S3_BUCKET_NAME}/email-template.html --content-type text/html
       - echo "Creating deployment package..."
       - zip function.zip bootstrap
       - NEW_VERSION=$(aws lambda update-function-code --function-name ALSCalendarParser --zip-file fileb://function.zip --publish --query 'Version' --output text)
