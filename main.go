@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"golang.org/x/net/html"
 )
@@ -249,7 +250,10 @@ func HandleRequest(ctx context.Context) (Response, error) {
 		return createErrorResponse(fmt.Errorf("error marshaling report: %v", err))
 	}
 
-	emailBody := createBody(report)
+	emailBody, err := createBody(report)
+	if err != nil {
+		return createErrorResponse(fmt.Errorf("error creating email body: %v", err))
+	}
 	sendEmail(emailBody)
 
 	// Return successful response with calendar data
@@ -263,8 +267,35 @@ func HandleRequest(ctx context.Context) (Response, error) {
 	}, nil
 }
 
-func createBody(report *ChangeReport) string {
-	return "Hallo, dies ist eine Test-E-Mail, die von einer Golang AWS Lambda-Funktion gesendet wurde."
+func createBody(report *ChangeReport) (string, error) {
+	region := "eu-central-1"
+
+	config, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
+	if err != nil {
+		log.Fatal(err)
+	}
+	s3Client := s3.NewFromConfig(config)
+	bucket := "alsparser-email-template"
+	key := "email-template.html"
+
+	result, err := s3Client.GetObject(context.TODO(), &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+
+	if err != nil {
+		return "", fmt.Errorf("error loading email template from S3: %v", err)
+
+	}
+	defer result.Body.Close()
+
+	emailTemplate, err := io.ReadAll(result.Body)
+	if err != nil {
+		return "", fmt.Errorf("error reading email template body: %v", err)
+	}
+
+	return string(emailTemplate), nil
+
 }
 
 // createErrorResponse creates an error response
@@ -374,16 +405,27 @@ func sendEmail(body string) error {
 	// Sender and recipient
 	from := "stefan@stefansiebel.de"
 	to := []string{"als-kalender-updates@googlegroups.com"}
-	subject := fmt.Sprintf("Subject: ALS Kalender Update - %s\n", time.Now().Format("02.01.2006"))
 
-	// Message format
-	message := []byte(subject + "\n" + body)
+	// Email headers
+	headers := make(map[string]string)
+	headers["From"] = from
+	headers["To"] = strings.Join(to, ",")
+	headers["Subject"] = fmt.Sprintf("ALS Kalender Update - %s", time.Now().Format("02.01.2006"))
+	headers["MIME-Version"] = "1.0"
+	headers["Content-Type"] = "text/html; charset=UTF-8"
+
+	// Build message with headers
+	message := ""
+	for key, value := range headers {
+		message += fmt.Sprintf("%s: %s\r\n", key, value)
+	}
+	message += "\r\n" + body
 
 	// Authentication
 	auth := smtp.PlainAuth("", username, password, smtpHost)
 
 	// Send the email
-	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, to, message)
+	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, to, []byte(message))
 	if err != nil {
 		return err
 	}
