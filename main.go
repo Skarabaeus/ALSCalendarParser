@@ -21,15 +21,36 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"golang.org/x/net/html"
 )
 
 const (
-	url       = "https://als-usingen.de/kalender/"
-	userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-	tableName = "ALSEvents"
+	url           = "https://als-usingen.de/kalender/"
+	userAgent     = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+	tableName     = "ALSEvents"
+	emailTemplate = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ALS Kalender Update</title>
+</head>
+<body style="font-family: Arial, sans-serif; margin: 20px; padding: 20px; background-color: #f9f9f9;">
+    <h1 style="text-align: center; color: #333;">ALS Kalender Update</h1>
+    <table align="center" width="100%" style="max-width: 600px; background-color: #ffffff; padding: 20px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+        <tr>
+            <td>
+                <h2 style="text-align: center; color: #333;">{title_list)</h2>
+              
+                <ul style="color: #666;">
+                    {list_items}
+                </ul>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>`
 )
 
 // Event represents a calendar event with a date and description
@@ -268,32 +289,7 @@ func HandleRequest(ctx context.Context) (Response, error) {
 }
 
 func createBody(report *ChangeReport) (string, error) {
-	region := "eu-central-1"
-
-	config, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	s3Client := s3.NewFromConfig(config)
-	bucket := "alsparser-email-template"
-	key := "email-template.html"
-
-	result, err := s3Client.GetObject(context.Background(), &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		return "", fmt.Errorf("error loading email template from S3: %v", err)
-	}
-	defer result.Body.Close()
-
-	emailTemplate, err := io.ReadAll(result.Body)
-	if err != nil {
-		return "", fmt.Errorf("error reading email template body: %v", err)
-	}
-
-	return string(emailTemplate), nil
+	return emailTemplate, nil
 }
 
 // createErrorResponse creates an error response
