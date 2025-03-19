@@ -274,18 +274,17 @@ func createBody(report *ChangeReport) (string, error) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	s3Client := s3.NewFromConfig(config)
 	bucket := "alsparser-email-template"
 	key := "email-template.html"
 
-	result, err := s3Client.GetObject(context.TODO(), &s3.GetObjectInput{
+	result, err := s3Client.GetObject(context.Background(), &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})
-
 	if err != nil {
 		return "", fmt.Errorf("error loading email template from S3: %v", err)
-
 	}
 	defer result.Body.Close()
 
@@ -295,7 +294,6 @@ func createBody(report *ChangeReport) (string, error) {
 	}
 
 	return string(emailTemplate), nil
-
 }
 
 // createErrorResponse creates an error response
