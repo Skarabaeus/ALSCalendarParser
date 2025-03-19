@@ -7,8 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"net/smtp"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -18,14 +21,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"golang.org/x/net/html"
 )
 
 const (
-	url        = "https://als-usingen.de/kalender/"
-	userAgent  = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-	tableName  = "ALSEvents"
-	secretName = "prod/mailersend/apitoken"
+	url       = "https://als-usingen.de/kalender/"
+	userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+	tableName = "ALSEvents"
 )
 
 // Event represents a calendar event with a date and description
@@ -44,10 +47,11 @@ type DynamoDBEvent struct {
 
 // ChangeReport represents the changes detected in the calendar
 type ChangeReport struct {
-	DeletedCount  int     `json:"deletedCount"`
-	DeletedEvents []Event `json:"deletedEvents"`
-	AddedCount    int     `json:"addedCount"`
-	AddedEvents   []Event `json:"addedEvents"`
+	DeletedCount   int     `json:"deletedCount"`
+	DeletedEvents  []Event `json:"deletedEvents"`
+	AddedCount     int     `json:"addedCount"`
+	AddedEvents    []Event `json:"addedEvents"`
+	UpcomingEvents []Event `json:"upcomingEvents"`
 }
 
 // Response represents the Lambda function response
@@ -71,8 +75,9 @@ func generateChecksum(description string) string {
 // processEvents compares current events with stored events and tracks changes
 func processEvents(ctx context.Context, client *dynamodb.Client, events []Event) (*ChangeReport, error) {
 	report := &ChangeReport{
-		DeletedEvents: make([]Event, 0),
-		AddedEvents:   make([]Event, 0),
+		DeletedEvents:  make([]Event, 0),
+		AddedEvents:    make([]Event, 0),
+		UpcomingEvents: make([]Event, 0),
 	}
 
 	// Get all existing events from DynamoDB
@@ -86,6 +91,10 @@ func processEvents(ctx context.Context, client *dynamodb.Client, events []Event)
 	for _, e := range existingEvents {
 		existingMap[e.EventKey] = e
 	}
+
+	// Get the date range for upcoming events
+	now := time.Now()
+	cutoff := now.AddDate(0, 0, 60) // 60 days from now
 
 	// Process current events
 	currentMap := make(map[string]bool)
@@ -109,6 +118,11 @@ func processEvents(ctx context.Context, client *dynamodb.Client, events []Event)
 				return nil, fmt.Errorf("error storing new event: %v", err)
 			}
 		}
+
+		// Check if this is an upcoming event (within next 60 days)
+		if event.EventDate.After(now) && event.EventDate.Before(cutoff) {
+			report.UpcomingEvents = append(report.UpcomingEvents, event)
+		}
 	}
 
 	// Find deleted events
@@ -125,6 +139,11 @@ func processEvents(ctx context.Context, client *dynamodb.Client, events []Event)
 			}
 		}
 	}
+
+	// Sort upcoming events by date
+	sort.Slice(report.UpcomingEvents, func(i, j int) bool {
+		return report.UpcomingEvents[i].EventDate.Before(report.UpcomingEvents[j].EventDate)
+	})
 
 	report.DeletedCount = len(report.DeletedEvents)
 	report.AddedCount = len(report.AddedEvents)
@@ -230,6 +249,9 @@ func HandleRequest(ctx context.Context) (Response, error) {
 		return createErrorResponse(fmt.Errorf("error marshaling report: %v", err))
 	}
 
+	emailBody := createBody(report)
+	sendEmail(emailBody)
+
 	// Return successful response with calendar data
 	return Response{
 		StatusCode: 200,
@@ -239,6 +261,10 @@ func HandleRequest(ctx context.Context) (Response, error) {
 			"Access-Control-Allow-Origin": "*",
 		},
 	}, nil
+}
+
+func createBody(report *ChangeReport) string {
+	return "Hallo, dies ist eine Test-E-Mail, die von einer Golang AWS Lambda-Funktion gesendet wurde."
 }
 
 // createErrorResponse creates an error response
@@ -338,6 +364,71 @@ func cleanText(s string) string {
 	return s
 }
 
+func sendEmail(body string) error {
+	// SMTP server configuration
+	smtpHost := "email-smtp.eu-central-1.amazonaws.com"
+	smtpPort := "587"
+
+	username, password := getSmtpCredentials()
+
+	// Sender and recipient
+	from := "stefan@stefansiebel.de"
+	to := []string{"als-kalender-updates@googlegroups.com"}
+	subject := fmt.Sprintf("Subject: ALS Kalender Update - %s\n", time.Now().Format("02.01.2006"))
+
+	// Message format
+	message := []byte(subject + "\n" + body)
+
+	// Authentication
+	auth := smtp.PlainAuth("", username, password, smtpHost)
+
+	// Send the email
+	err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, to, message)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func getSmtpCredentials() (string, string) {
+	secretName := "prod/eu-central-1/smtp"
+	region := "eu-central-1"
+
+	config, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create Secrets Manager client
+	svc := secretsmanager.NewFromConfig(config)
+
+	input := &secretsmanager.GetSecretValueInput{
+		SecretId:     aws.String(secretName),
+		VersionStage: aws.String("AWSCURRENT"), // VersionStage defaults to AWSCURRENT if unspecified
+	}
+
+	result, err := svc.GetSecretValue(context.TODO(), input)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	// Decrypts secret using the associated KMS key.
+	var secretString string = *result.SecretString
+
+	// Parse the JSON to get both secrets
+	var secretData map[string]string
+	if err := json.Unmarshal([]byte(secretString), &secretData); err != nil {
+		log.Fatal(err.Error())
+	}
+
+	// Extract username and password
+	username := secretData["ses-smtp-username-eu-central-1"]
+	password := secretData["ses-smtp-password-eu-central-1"]
+
+	return username, password
+
+}
 func main() {
 	lambda.Start(HandleRequest)
 }
