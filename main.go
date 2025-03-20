@@ -41,16 +41,19 @@ const (
     <table align="center" width="100%" style="max-width: 600px; background-color: #ffffff; padding: 20px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
         <tr>
             <td>
-                <h2 style="text-align: center; color: #333;">{title_list)</h2>
-              
-                <ul style="color: #666;">
-                    {list_items}
-                </ul>
+                {list_placeholder}
             </td>
         </tr>
     </table>
 </body>
 </html>`
+	listTemplate = `
+<h2 style="text-align: center; color: #333;">{title_list}</h2>
+
+<ul style="color: #666;">
+    {list_items}
+</ul>
+`
 )
 
 // Event represents a calendar event with a date and description
@@ -289,7 +292,38 @@ func HandleRequest(ctx context.Context) (Response, error) {
 }
 
 func createBody(report *ChangeReport) (string, error) {
-	return emailTemplate, nil
+	// Create the first list for changed events
+	changedEventsList := ""
+	for _, event := range report.AddedEvents {
+		changedEventsList += fmt.Sprintf("<li><b>%s</b><br />%s<br /><br /></li>",
+			event.EventDate.Format("02.01.2006"),
+			event.EventDescription)
+	}
+	changedEventsSection := ""
+	if report.AddedCount > 0 {
+		changedEventsSection = strings.ReplaceAll(listTemplate, "{title_list}", "Geänderte Kalendereinträge")
+		changedEventsSection = strings.ReplaceAll(changedEventsSection, "{list_items}", changedEventsList)
+	}
+
+	// Create the second list for upcoming events
+	upcomingEventsList := ""
+	for _, event := range report.UpcomingEvents {
+		upcomingEventsList += fmt.Sprintf("<li><b>%s</b><br />%s<br /><br /></li>",
+			event.EventDate.Format("02.01.2006"),
+			event.EventDescription)
+	}
+	upcomingEventsSection := strings.ReplaceAll(listTemplate, "{title_list}", "Einträge für die nächste 60 Tage")
+	upcomingEventsSection = strings.ReplaceAll(upcomingEventsSection, "{list_items}", upcomingEventsList)
+
+	combinedLists := upcomingEventsSection
+	if changedEventsList != "" {
+		combinedLists = changedEventsSection + upcomingEventsSection
+	}
+
+	// Replace the placeholder in the email template
+	finalEmail := strings.ReplaceAll(emailTemplate, "{list_placeholder}", combinedLists)
+
+	return finalEmail, nil
 }
 
 // createErrorResponse creates an error response
