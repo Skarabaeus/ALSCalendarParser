@@ -274,11 +274,17 @@ func HandleRequest(ctx context.Context) (Response, error) {
 		return createErrorResponse(fmt.Errorf("error marshaling report: %v", err))
 	}
 
-	emailBody, err := createBody(report)
-	if err != nil {
-		return createErrorResponse(fmt.Errorf("error creating email body: %v", err))
+	if report.AddedCount > 0 || time.Now().Weekday() == time.Friday {
+		emailBody, err := createBody(report)
+		if err != nil {
+			return createErrorResponse(fmt.Errorf("error creating email body: %v", err))
+		}
+
+		err = sendEmail(emailBody)
+		if err != nil {
+			return createErrorResponse(fmt.Errorf("error sending email: %v", err))
+		}
 	}
-	sendEmail(emailBody)
 
 	// Return successful response with calendar data
 	return Response{
