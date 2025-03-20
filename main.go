@@ -318,7 +318,7 @@ func createBody(report *ChangeReport) (string, error) {
 			event.EventDate.Format("02.01.2006"),
 			event.EventDescription)
 	}
-	upcomingEventsSection := strings.ReplaceAll(listTemplate, "{title_list}", "Einträge für die nächste 60 Tage")
+	upcomingEventsSection := strings.ReplaceAll(listTemplate, "{title_list}", "Einträge für die nächsten 60 Tage")
 	upcomingEventsSection = strings.ReplaceAll(upcomingEventsSection, "{list_items}", upcomingEventsList)
 
 	combinedLists := upcomingEventsSection
