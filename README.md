@@ -1,6 +1,6 @@
 # ALSCalendarParser
 
-##What does this script do?
+## What does this script do?
 
 On its website, the Astrid Lindgren Primary School in Usingen provides a calendar where all events are announced well in advance. Unfortunately, proactive email notifications about upcoming events or timetable updates are sometimes sent out very late.  
 
