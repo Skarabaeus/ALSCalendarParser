@@ -26,10 +26,14 @@ import (
 )
 
 const (
-	url           = "https://als-usingen.de/kalender/"
-	userAgent     = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-	tableName     = "ALSEvents"
-	emailTemplate = `<!DOCTYPE html>
+	// admin-ajax endpoint used by the ICS Calendar plugin
+	calendarURL  = "https://als-usingen.de/wp-admin/admin-ajax.php"
+	userAgent    = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+	tableName    = "ALSEvents"
+	// NOTE: These values were captured from the browser request. They may need updating
+	// in the future if the site changes how it calls the calendar.
+	calendarPostBody = "action=r34ics_ajax&r34ics_nonce=f580d97742&subaction=display_calendar&args=36934c00d2e5f1291fbba4ac8ab17363c1c81b13&js_args%5Bdebug%5D="
+	emailTemplate    = `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -239,12 +243,15 @@ func HandleRequest(ctx context.Context) (Response, error) {
 
 	// Create HTTP client and fetch calendar data
 	httpClient := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("POST", calendarURL, strings.NewReader(calendarPostBody))
 	if err != nil {
 		return createErrorResponse(fmt.Errorf("error creating request: %v", err))
 	}
 
 	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+	req.Header.Set("Accept", "text/plain, */*; q=0.01")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return createErrorResponse(fmt.Errorf("error making request: %v", err))
