@@ -27,12 +27,12 @@ import (
 
 const (
 	// admin-ajax endpoint used by the ICS Calendar plugin
-	calendarURL  = "https://als-usingen.de/wp-admin/admin-ajax.php"
-	userAgent    = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-	tableName    = "ALSEvents"
+	calendarURL = "https://als-usingen.de/wp-admin/admin-ajax.php"
+	userAgent   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+	tableName   = "ALSEvents"
 	// NOTE: These values were captured from the browser request. They may need updating
 	// in the future if the site changes how it calls the calendar.
-	calendarPostBody = "action=r34ics_ajax&r34ics_nonce=f580d97742&subaction=display_calendar&args=36934c00d2e5f1291fbba4ac8ab17363c1c81b13&js_args%5Bdebug%5D="
+	calendarPostBody = "action=r34ics_ajax&r34ics_nonce=f6b52628cb&subaction=display_calendar&args=83d436b50dbe80b1c6621d3bfd86f474f570c71f&js_args%5Bdebug%5D="
 	emailTemplate    = `<!DOCTYPE html>
 <html>
 <head>
