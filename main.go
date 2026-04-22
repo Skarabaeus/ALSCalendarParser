@@ -27,12 +27,10 @@ import (
 
 const (
 	// admin-ajax endpoint used by the ICS Calendar plugin
-	calendarURL = "https://als-usingen.de/wp-admin/admin-ajax.php"
-	userAgent   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-	tableName   = "ALSEvents"
-	// NOTE: These values were captured from the browser request. They may need updating
-	// in the future if the site changes how it calls the calendar.
-	calendarPostBody = "action=r34ics_ajax&r34ics_nonce=f6b52628cb&subaction=display_calendar&args=83d436b50dbe80b1c6621d3bfd86f474f570c71f&js_args%5Bdebug%5D="
+	calendarURL     = "https://als-usingen.de/wp-admin/admin-ajax.php"
+	calendarPageURL = "https://als-usingen.de/kalender/"
+	userAgent       = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+	tableName       = "ALSEvents"
 	emailTemplate    = `<!DOCTYPE html>
 <html>
 <head>
@@ -88,6 +86,41 @@ type Response struct {
 	StatusCode int               `json:"statusCode"`
 	Body       string            `json:"body"`
 	Headers    map[string]string `json:"headers"`
+}
+
+// fetchCalendarParams fetches the calendar page and extracts the nonce and args
+// values that the ICS Calendar plugin embeds at render time.
+func fetchCalendarParams(httpClient *http.Client) (nonce, args string, err error) {
+	req, err := http.NewRequest("GET", calendarPageURL, nil)
+	if err != nil {
+		return "", "", fmt.Errorf("error creating page request: %v", err)
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("error fetching calendar page: %v", err)
+	}
+	defer resp.Body.Close()
+
+	pageBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", "", fmt.Errorf("error reading calendar page: %v", err)
+	}
+
+	nonceRe := regexp.MustCompile(`"r34ics_nonce"\s*:\s*"([^"]+)"`)
+	argsRe := regexp.MustCompile(`data-args="([^"]+)"`)
+
+	nonceMatch := nonceRe.FindSubmatch(pageBody)
+	if len(nonceMatch) < 2 {
+		return "", "", fmt.Errorf("r34ics_nonce not found in calendar page")
+	}
+	argsMatch := argsRe.FindSubmatch(pageBody)
+	if len(argsMatch) < 2 {
+		return "", "", fmt.Errorf("data-args not found in calendar page")
+	}
+
+	return string(nonceMatch[1]), string(argsMatch[1]), nil
 }
 
 // generateEventKey creates a unique key for an event based on its date and description
@@ -243,7 +276,18 @@ func HandleRequest(ctx context.Context) (Response, error) {
 
 	// Create HTTP client and fetch calendar data
 	httpClient := &http.Client{}
-	req, err := http.NewRequest("POST", calendarURL, strings.NewReader(calendarPostBody))
+
+	nonce, calArgs, err := fetchCalendarParams(httpClient)
+	if err != nil {
+		return createErrorResponse(fmt.Errorf("error fetching calendar params: %v", err))
+	}
+
+	postBody := fmt.Sprintf(
+		"action=r34ics_ajax&r34ics_nonce=%s&subaction=display_calendar&args=%s&js_args%%5Bdebug%%5D=",
+		nonce, calArgs,
+	)
+
+	req, err := http.NewRequest("POST", calendarURL, strings.NewReader(postBody))
 	if err != nil {
 		return createErrorResponse(fmt.Errorf("error creating request: %v", err))
 	}
